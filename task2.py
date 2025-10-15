@@ -3,9 +3,11 @@ from typing import Dict
 import time
 from collections import deque
 
+
 class SlidingWindowRateLimiter:
     def __init__(self, window_size: int = 10, max_requests: int = 1):
-		pass
+        pass
+
     def _cleanup_window(self, user_id: str, current_time: float) -> None:
         pass
 
@@ -17,6 +19,7 @@ class SlidingWindowRateLimiter:
 
     def time_until_next_allowed(self, user_id: str) -> float:
         pass
+
 
 # Демонстрація роботи
 def test_rate_limiter():
@@ -32,8 +35,10 @@ def test_rate_limiter():
         result = limiter.record_message(str(user_id))
         wait_time = limiter.time_until_next_allowed(str(user_id))
 
-        print(f"Повідомлення {message_id:2d} | Користувач {user_id} | "
-              f"{'✓' if result else f'× (очікування {wait_time:.1f}с)'}")
+        print(
+            f"Повідомлення {message_id:2d} | Користувач {user_id} | "
+            f"{'✓' if result else f'× (очікування {wait_time:.1f}с)'}"
+        )
 
         # Невелика затримка між повідомленнями для реалістичності
         # Випадкова затримка від 0.1 до 1 секунди
@@ -48,10 +53,13 @@ def test_rate_limiter():
         user_id = message_id % 5 + 1
         result = limiter.record_message(str(user_id))
         wait_time = limiter.time_until_next_allowed(str(user_id))
-        print(f"Повідомлення {message_id:2d} | Користувач {user_id} | "
-              f"{'✓' if result else f'× (очікування {wait_time:.1f}с)'}")
+        print(
+            f"Повідомлення {message_id:2d} | Користувач {user_id} | "
+            f"{'✓' if result else f'× (очікування {wait_time:.1f}с)'}"
+        )
         # Випадкова затримка від 0.1 до 1 секунди
         time.sleep(random.uniform(0.1, 1.0))
+
 
 if __name__ == "__main__":
     test_rate_limiter()
