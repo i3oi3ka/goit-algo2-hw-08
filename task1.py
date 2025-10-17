@@ -22,7 +22,11 @@ def make_queries(n, q, hot_pool=30, p_hot=0.95, p_update=0.03):
     return queries
 
 
-def range_sum_no_cache(array, left, right): ...
+def range_sum_no_cache(array, left, right):
+    summ = 0
+    for i in range(left, right + 1):
+        summ += array[i]
+    return summ
 
 
 def update_no_cache(array, index, value): ...
