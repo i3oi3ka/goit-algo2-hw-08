@@ -1,6 +1,30 @@
 import random
 import time
-from functools import lru_cache
+from collections import OrderedDict
+
+
+class LRUCache:
+    def __init__(self, capacity=1000):
+        self.capacity = capacity
+        self.cache = OrderedDict()
+
+    def get(self, key):
+        if key not in self.cache:
+            return -1
+        self.cache.move_to_end(key)
+        return self.cache[key]
+
+    def put(self, key, value):
+        self.cache[key] = value
+        self.cache.move_to_end(key)
+        if len(self.cache) > self.capacity:
+            self.cache.popitem(last=False)
+
+    def invalidate(self, index):
+        # видаляємо всі діапазони, які містять index
+        keys_to_remove = [k for k in self.cache if k[0] <= index <= k[1]]
+        for k in keys_to_remove:
+            del self.cache[k]
 
 
 def range_sum_no_cache(array, left, right):
@@ -11,18 +35,21 @@ def update_no_cache(array, index, value):
     array[index] = value
 
 
-@lru_cache(maxsize=1000)
-def cached_sum(array_tuple, left, right):
-    return sum(array_tuple[left : right + 1])
+cache = LRUCache(capacity=1000)
 
 
 def range_sum_with_cache(array, left, right):
-    return cached_sum(tuple(array), left, right)
+    key = (left, right)
+    result = cache.get(key)
+    if result == -1:
+        result = sum(array[left : right + 1])
+        cache.put(key, result)
+    return result
 
 
 def update_with_cache(array, index, value):
     array[index] = value
-    cached_sum.cache_clear()
+    cache.invalidate(index)
 
 
 def make_queries(n, q, hot_pool=30, p_hot=0.95, p_update=0.03):
@@ -51,7 +78,7 @@ def process_queries_no_cache(array, queries):
         if query[0] == "Range":
             _, l, r = query
             range_sum_no_cache(array, l, r)
-        elif query[0] == "Update":
+        else:
             _, i, val = query
             update_no_cache(array, i, val)
 
@@ -61,7 +88,7 @@ def process_queries_with_cache(array, queries):
         if query[0] == "Range":
             _, l, r = query
             range_sum_with_cache(array, l, r)
-        elif query[0] == "Update":
+        else:
             _, i, val = query
             update_with_cache(array, i, val)
 
@@ -69,24 +96,20 @@ def process_queries_with_cache(array, queries):
 if __name__ == "__main__":
     n = 100_000
     q = 50_000
-
     array = [random.randint(1, 100) for _ in range(n)]
     queries = make_queries(n, q)
 
-    # without cache
     arr_copy = array.copy()
     t1 = time.time()
     process_queries_no_cache(arr_copy, queries)
     t_no_cache = time.time() - t1
 
-    # with cache
     arr_copy = array.copy()
     t2 = time.time()
     process_queries_with_cache(arr_copy, queries)
     t_with_cache = time.time() - t2
 
-    # result
-    speedup = t_no_cache / t_with_cache if t_with_cache > 0 else float("inf")
-
     print(f"Без кешу : {t_no_cache:.2f} c")
-    print(f"LRU-кеш  : {t_with_cache:.2f} c  (прискорення ×{speedup:.2f})")
+    print(
+        f"LRU-кеш  : {t_with_cache:.2f} c  (прискорення ×{t_no_cache / t_with_cache:.2f})"
+    )
