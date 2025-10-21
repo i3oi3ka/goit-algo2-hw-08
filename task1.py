@@ -1,115 +1,81 @@
 import random
+from typing import Dict
 import time
-from collections import OrderedDict
+from collections import deque
 
 
-class LRUCache:
-    def __init__(self, capacity=1000):
-        self.capacity = capacity
-        self.cache = OrderedDict()
+class SlidingWindowRateLimiter:
+    def __init__(self, window_size: int = 10, max_requests: int = 1):
+        self.window_size = window_size
+        self.max_requests = max_requests
+        self.user_requests: Dict[str, deque[float]] = {}
 
-    def get(self, key):
-        if key not in self.cache:
-            return -1
-        self.cache.move_to_end(key)
-        return self.cache[key]
+    def _cleanup_window(self, user_id: str, current_time: float) -> None:
+        if user_id not in self.user_requests:
+            return
 
-    def put(self, key, value):
-        self.cache[key] = value
-        self.cache.move_to_end(key)
-        if len(self.cache) > self.capacity:
-            self.cache.popitem(last=False)
+        while (
+            self.user_requests[user_id]
+            and self.user_requests[user_id][0] < current_time - self.window_size
+        ):
+            self.user_requests[user_id].popleft()
 
-    def invalidate(self, index):
-        # видаляємо всі діапазони, які містять index
-        keys_to_remove = [k for k in self.cache if k[0] <= index <= k[1]]
-        for k in keys_to_remove:
-            del self.cache[k]
+        # Якщо deque спорожнів — видаляємо запис про користувача
+        if not self.user_requests[user_id]:
+            del self.user_requests[user_id]
 
+    def can_send_message(self, user_id: str) -> bool:
+        self._cleanup_window(user_id, time.time())
+        if user_id not in self.user_requests:
+            return True
+        return len(self.user_requests[user_id]) < self.max_requests
 
-def range_sum_no_cache(array, left, right):
-    return sum(array[left : right + 1])
+    def record_message(self, user_id: str) -> bool:
+        if not self.can_send_message(user_id):
+            return False
 
+        current_time = time.time()
+        if user_id not in self.user_requests:
+            self.user_requests[user_id] = deque()
+        self.user_requests[user_id].append(current_time)
+        return True
 
-def update_no_cache(array, index, value):
-    array[index] = value
-
-
-cache = LRUCache(capacity=1000)
-
-
-def range_sum_with_cache(array, left, right):
-    key = (left, right)
-    result = cache.get(key)
-    if result == -1:
-        result = sum(array[left : right + 1])
-        cache.put(key, result)
-    return result
-
-
-def update_with_cache(array, index, value):
-    array[index] = value
-    cache.invalidate(index)
+    def time_until_next_allowed(self, user_id: str) -> float:
+        self._cleanup_window(user_id, time.time())
+        if user_id not in self.user_requests or not self.user_requests[user_id]:
+            return 0.0
+        return max(0.0, self.user_requests[user_id][0] + self.window_size - time.time())
 
 
-def make_queries(n, q, hot_pool=30, p_hot=0.95, p_update=0.03):
-    hot = [
-        (random.randint(0, n // 2), random.randint(n // 2, n - 1))
-        for _ in range(hot_pool)
-    ]
-    queries = []
-    for _ in range(q):
-        if random.random() < p_update:
-            idx = random.randint(0, n - 1)
-            val = random.randint(1, 100)
-            queries.append(("Update", idx, val))
-        else:
-            if random.random() < p_hot:
-                left, right = random.choice(hot)
-            else:
-                left = random.randint(0, n - 1)
-                right = random.randint(left, n - 1)
-            queries.append(("Range", left, right))
-    return queries
+# Демонстрація роботи
+def test_rate_limiter():
+    limiter = SlidingWindowRateLimiter(window_size=10, max_requests=1)
 
+    print("\n=== Симуляція потоку повідомлень ===")
+    for message_id in range(1, 11):
+        user_id = message_id % 5 + 1
+        result = limiter.record_message(str(user_id))
+        wait_time = limiter.time_until_next_allowed(str(user_id))
+        print(
+            f"Повідомлення {message_id:2d} | Користувач {user_id} | "
+            f"{'✓' if result else f'× (очікування {wait_time:.1f}с)'}"
+        )
+        time.sleep(random.uniform(0.1, 1.0))
 
-def process_queries_no_cache(array, queries):
-    for query in queries:
-        if query[0] == "Range":
-            _, l, r = query
-            range_sum_no_cache(array, l, r)
-        else:
-            _, i, val = query
-            update_no_cache(array, i, val)
+    print("\nОчікуємо 4 секунди...")
+    time.sleep(4)
 
-
-def process_queries_with_cache(array, queries):
-    for query in queries:
-        if query[0] == "Range":
-            _, l, r = query
-            range_sum_with_cache(array, l, r)
-        else:
-            _, i, val = query
-            update_with_cache(array, i, val)
+    print("\n=== Нова серія повідомлень після очікування ===")
+    for message_id in range(11, 21):
+        user_id = message_id % 5 + 1
+        result = limiter.record_message(str(user_id))
+        wait_time = limiter.time_until_next_allowed(str(user_id))
+        print(
+            f"Повідомлення {message_id:2d} | Користувач {user_id} | "
+            f"{'✓' if result else f'× (очікування {wait_time:.1f}с)'}"
+        )
+        time.sleep(random.uniform(0.1, 1.0))
 
 
 if __name__ == "__main__":
-    n = 100_000
-    q = 50_000
-    array = [random.randint(1, 100) for _ in range(n)]
-    queries = make_queries(n, q)
-
-    arr_copy = array.copy()
-    t1 = time.time()
-    process_queries_no_cache(arr_copy, queries)
-    t_no_cache = time.time() - t1
-
-    arr_copy = array.copy()
-    t2 = time.time()
-    process_queries_with_cache(arr_copy, queries)
-    t_with_cache = time.time() - t2
-
-    print(f"Без кешу : {t_no_cache:.2f} c")
-    print(
-        f"LRU-кеш  : {t_with_cache:.2f} c  (прискорення ×{t_no_cache / t_with_cache:.2f})"
-    )
+    test_rate_limiter()
